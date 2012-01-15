@@ -1,6 +1,6 @@
 module Spreadsheet where
 
-import Data.Time
+import Data.Time (Day)
 
 data CellType
   = NumberT (Maybe Integer)
