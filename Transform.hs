@@ -20,6 +20,7 @@ removeErrors = unlines . filter (not . isPrefixOf "!") . lines
 inlineError err xs = a ++ [errline] ++ b
   where
   (a,b) = splitAt (sourceLine (errorPos err)) xs
+
   spaceBeforeCaret = sourceColumn (errorPos err) - 2
   errline
     | length errText + 2 <= spaceBeforeCaret
