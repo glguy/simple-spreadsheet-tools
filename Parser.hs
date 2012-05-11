@@ -10,9 +10,13 @@ import Text.Parsec
 import Spreadsheet
 import ListUtilities
 
+-- | 'defaultType' is the type that columns will default to when
+-- not otherwise specified
 defaultType :: CellType
 defaultType = StringT
 
+-- | Parse a full spread-sheet file. This parser expects to use the
+-- whole input.
 spreadsheetParser :: Parsec String () Spreadsheet
 spreadsheetParser = do
   spaces
@@ -44,39 +48,50 @@ extendFormats _      ys             = map (const defaultType) ys
 headerChar :: Parsec String () Char
 headerChar = satisfy (\x -> isPrint x && x `notElem` "<>+-\n") <?> "column name"
 
+-- | 'headerRow' the header line of the spreadsheet
 headerRow :: Parsec String () [HeaderToken]
 headerRow = many headerCell <* eol
 
+-- | 'headerCell' parses a single header entry in the header line
+-- or the "new header" placeholder
 headerCell :: Parsec String () HeaderToken
 headerCell = existingHeader <|> newHeader
 
+-- | 'headerCell' parses a single header entry in the header line
 existingHeader :: Parsec String () HeaderToken
 existingHeader = between (startOfHeader >> white) (endOfHeader >> white)
   $ do name <- many headerChar
        order <- option Nothing (fmap Just sortOrder)
        return (HeaderToken (trim name) order)
 
+-- | 'sortOrder' parses the ascending/descending indicator
 sortOrder :: Parsec String () SortOrder
 sortOrder = (char '+' >> white >> return Ascending)
         <|> (char '-' >> white >> return Descending)
 
+-- | 'newHeader' parses the new header placeholder
 newHeader :: Parsec String () HeaderToken
 newHeader = char '+' >> white >> return NewColumn
 
+-- | 'formatCell' parses the "type" field of a column
 formatCell :: Parsec String () CellType
 formatCell = (string "text"   >> return StringT)
          <|> (string "number" >> fmap NumberT (optionMaybe (char ':' >> integer)))
          <|> (string "date"   >> return DateT)
 
+-- | 'dividerRow' parses the line drawn between headers and body
 dividerRow :: Parsec String () ()
 dividerRow = skipMany1 (char '=') >> white >> eol
 
+-- | 'tableRow' parses a whole row of data cells
 tableRow :: [CellType] -> Parsec String () [CellValue]
 tableRow formats = (newRow formats <|> mapM dataCell formats) <* eol
 
+-- | 'newRow' parses a new row placeholder
 newRow :: [CellType] -> Parsec String () [CellValue]
 newRow formats = char '+' >> return (map (const EmptyV) formats)
 
+-- | 'dataCell' parses an individual data cell in a data row
 dataCell :: CellType -> Parsec String () CellValue
 dataCell EmptyT = return EmptyV
 dataCell fmt = between (startOfCell >> white) (endOfCell >> white)
@@ -88,14 +103,16 @@ dataCell fmt = between (startOfCell >> white) (endOfCell >> white)
 
 startOfHeader, endOfHeader, startOfCell, endOfCell
   :: Parsec String () Char
-startOfHeader = char '<' <?> "start of header"
-endOfHeader   = char '>' <?> "end of header"
-startOfCell   = char '[' <?> "start of cell"
-endOfCell     = char ']' <?> "end of cell"
+startOfHeader = char '<' <?> "start of header '<'"
+endOfHeader   = char '>' <?> "end of header '>'"
+startOfCell   = char '[' <?> "start of cell '['"
+endOfCell     = char ']' <?> "end of cell ']'"
 
+-- | 'stringParser' parses a string of allowed data characters
 stringParser :: Parsec String () String
 stringParser = fmap trim (many1 dataChar)
 
+-- | 'numberParser' parses data cells holding number fields
 numberParser :: Parsec String () Rational
 numberParser = do
   negative <- option False (char '-' >> return True)
@@ -107,6 +124,7 @@ numberParser = do
   white
   return n'
 
+-- | 'dateParser' parses data cells holding date fields
 dateParser :: Parsec String () Day
 dateParser = do
   year  <- integer
@@ -118,39 +136,47 @@ dateParser = do
     Nothing   -> fail "Invalid date"
     Just date -> white >> return date
 
+-- | 'dayInteger' parses number between 1 and 12
 monthInteger :: Parsec String () Integer
 monthInteger = do
   month <- integer
   when (month < 1 || month > 12) (fail "Invalid date")
   return month
 
+-- | 'dayInteger' parses number between 1 and 31
 dayInteger :: Parsec String () Integer
 dayInteger = do
   day <- integer
   when (day < 1 || day > 31) (fail "Invalid date")
   return day
 
+-- | 'integer' parses a whole number
 integer :: Parsec String () Integer
-integer = fmap read (many1 digit) <?> "number"
+integer = fmap read (many1 digit) <?> "integer"
 
+-- | 'dataChar' parses a legal character in string fields
 dataChar :: Parsec String () Char
 dataChar = satisfy (\x -> isPrint x && x `notElem` "[]\n") <?> "text"
 
+-- | 'trim' removes leading and trailing whitespace on a string
 trim :: String -> String
 trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
+-- | 'white' skips spaces and tabs
 white :: Parsec String () ()
-white = skipMany (char ' ' <?> "whitespace")
+white = skipMany (oneOf " \t" <?> "whitespace")
 
+-- | 'eol' parses the end-of-line token
 eol :: Parsec String () ()
 eol = newline >> spaces
 
+-- | 'wordsRow' parses a sequence of words delimited by whitespace ending in a newline
 wordsRow :: Parsec String () a -> Parsec String () [a]
 wordsRow p = onemore <|> ([] <$ eol)
   where
   onemore = do
     x <- p
-    xs <- (skipMany1 (char ' ') >> wordsRow p)
+    xs <- (skipMany1 (oneOf " \t") >> wordsRow p)
       <|> ([] <$ eol)
     return (x:xs)
 
@@ -159,10 +185,12 @@ data HeaderToken
   | HeaderToken String (Maybe SortOrder)
   deriving (Read, Show, Eq)
 
+-- | 'headerTokenName' returns the name of a 'HeaderToken'
 headerTokenName :: HeaderToken -> String
 headerTokenName (HeaderToken n _) = n
 headerTokenName NewColumn         = ""
 
+-- | 'headerTokenName' returns the sort order of a 'HeaderToken'
 headerSortOrder :: HeaderToken -> Maybe SortOrder
 headerSortOrder (HeaderToken _ s) = s
 headerSortOrder NewColumn         = Nothing
