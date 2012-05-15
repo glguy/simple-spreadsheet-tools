@@ -19,8 +19,8 @@ data Column = Column
 data CellValue
   = NumberV Rational
   | StringV String
-  | EmptyV
   | DateV Day
+  | EmptyV
   deriving (Show, Read, Eq)
 
 data SortOrder

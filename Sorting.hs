@@ -5,6 +5,8 @@ import Data.Monoid
 
 import Spreadsheet
 
+-- | 'sortSpreadsheet' sorts the rows of a spreadsheet
+-- given the sort orders specified in the header row
 sortSpreadsheet :: Spreadsheet -> Spreadsheet
 sortSpreadsheet (Spreadsheet hs xs) = Spreadsheet hs (sortBy rowCompare xs)
   where
@@ -17,6 +19,10 @@ sortSpreadsheet (Spreadsheet hs xs) = Spreadsheet hs (sortBy rowCompare xs)
   aux (Just Descending) a b = compareData b a
 
 
+-- | 'compareData' compares two data cells using the underlying
+-- given the sort orders specified in the header row.
+-- Empty cells are considered the smallest and incomparable cells
+-- are considered equal (as this should not happen in real use)
 compareData :: CellValue -> CellValue -> Ordering
 compareData EmptyV       EmptyV       = EQ
 compareData EmptyV       _            = LT
