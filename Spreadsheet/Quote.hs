@@ -1,16 +1,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Spreadsheet.Quote (table) where
 
-import Data.Char (isAlphaNum)
 import Data.Time (Day, fromGregorian, toGregorian)
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Text.Parsec hiding (Column)
-import Text.Parsec.Error
 import Text.Parsec.Pos (newPos)
 
 import Spreadsheet
-import Spreadsheet.Parser (spreadsheetParser)
+import Spreadsheet.Parser (namedSpreadsheetParser)
 
 table :: QuasiQuoter
 table = QuasiQuoter
@@ -28,21 +26,12 @@ toFieldName str = mkName ("col_" ++ map escape str)
   escape ' ' = '_'
   escape x   = x
 
-declParser :: Parsec String () (String, Spreadsheet)
-declParser = do
-  name <- spaces >> identifier
-  _    <- spaces >> char '='
-  ss   <-           spreadsheetParser
-  return (name, ss)
-  where
-  identifier = many1 (satisfy isAlphaNum) <?> "identifier"
-
 -- 'tableQ' is a quasi-quoter for top-level spreadsheet declarations
 -- using the ASCII art spreadsheet format.
 tableQ :: String -> DecsQ
 tableQ str = do
   loc <- location
-  case parse (setLoc loc >> declParser) undefined str of
+  case parse (setLoc loc >> namedSpreadsheetParser) undefined str of
     Right (name, ss) -> tableD name ss
     Left err         -> fail (show err)
 

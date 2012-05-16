@@ -36,6 +36,16 @@ spreadsheetParser = do
   let columns = zipWith3 Column headings' formats'' orders
   return (Spreadsheet columns rows)
 
+namedSpreadsheetParser :: Parsec String () (String, Spreadsheet)
+namedSpreadsheetParser = do
+  name <- spaces >> identifier
+  _    <- spaces >> char '='
+  ss   <-           spreadsheetParser
+  return (name, ss)
+  where
+  identifier = many1 alphaNum <?> "identifier"
+
+
 -- | 'extendFormats' deals with creating new format types
 -- for newly created columns and for defaulting unspecified
 -- columns to the 'defaultType'
