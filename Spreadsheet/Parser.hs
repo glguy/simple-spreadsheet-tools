@@ -29,7 +29,7 @@ spreadsheetParser = do
   let formats'' = map (fromMaybe defaultType) formats'
   let orders    = map headerSortOrder headings
 
-  rows <- many (tableRow formats'')
+  rows <- many (tableRow formats')
   spaces
   eof
 
@@ -87,17 +87,18 @@ dividerRow = skipMany1 (char '=') >> white >> eol
          <?> "divider line (===)"
 
 -- | 'tableRow' parses a whole row of data cells
-tableRow :: [CellType] -> Parsec String () [CellValue]
+tableRow :: [Maybe CellType] -> Parsec String () [CellValue]
 tableRow formats = (newRow formats <|> mapM dataCell formats) <* eol
 
 -- | 'newRow' parses a new row placeholder
-newRow :: [CellType] -> Parsec String () [CellValue]
+newRow :: [Maybe CellType] -> Parsec String () [CellValue]
 newRow formats = map (const EmptyV) formats <$ char '+'
              <?> "new row marker (+)"
 
 -- | 'dataCell' parses an individual data cell in a data row
-dataCell :: CellType -> Parsec String () CellValue
-dataCell fmt = between (startOfCell >> white) (endOfCell >> white)
+dataCell :: Maybe CellType -> Parsec String () CellValue
+dataCell Nothing = return EmptyV
+dataCell (Just fmt) = between (startOfCell >> white) (endOfCell >> white)
              ( case fmt of
                  StringT   -> fmap StringV stringParser
                  NumberT _ -> fmap NumberV numberParser
