@@ -74,6 +74,7 @@ sortOrder = (char '+' >> white >> return Ascending)
 -- | 'newHeader' parses the new header placeholder
 newHeader :: Parsec String () HeaderToken
 newHeader = char '+' >> white >> return NewColumn
+         <?> "new header marker (+)"
 
 -- | 'formatCell' parses the "type" field of a column
 formatCell :: Parsec String () CellType
