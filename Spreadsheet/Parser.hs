@@ -60,14 +60,16 @@ headerCell = existingHeader <|> newHeader
 -- | 'headerCell' parses a single header entry in the header line
 existingHeader :: Parsec String () HeaderToken
 existingHeader = between (startOfHeader >> white) (endOfHeader >> white)
-  $ do name <- many headerChar
+   (do name <- many1 headerChar
        order <- option Nothing (fmap Just sortOrder)
        return (HeaderToken (trim name) order)
+   ) <?> "column header (<...>)"
 
 -- | 'sortOrder' parses the ascending/descending indicator
 sortOrder :: Parsec String () SortOrder
 sortOrder = (char '+' >> white >> return Ascending)
         <|> (char '-' >> white >> return Descending)
+ <?> "sort order (+)(-)"
 
 -- | 'newHeader' parses the new header placeholder
 newHeader :: Parsec String () HeaderToken
@@ -82,6 +84,7 @@ formatCell = (string "text"   >> return StringT)
 -- | 'dividerRow' parses the line drawn between headers and body
 dividerRow :: Parsec String () ()
 dividerRow = skipMany1 (char '=') >> white >> eol
+         <?> "divider line (===)"
 
 -- | 'tableRow' parses a whole row of data cells
 tableRow :: [CellType] -> Parsec String () [CellValue]
@@ -89,23 +92,25 @@ tableRow formats = (newRow formats <|> mapM dataCell formats) <* eol
 
 -- | 'newRow' parses a new row placeholder
 newRow :: [CellType] -> Parsec String () [CellValue]
-newRow formats = char '+' >> return (map (const EmptyV) formats)
+newRow formats = map (const EmptyV) formats <$ char '+'
+             <?> "new row marker (+)"
 
 -- | 'dataCell' parses an individual data cell in a data row
 dataCell :: CellType -> Parsec String () CellValue
 dataCell fmt = between (startOfCell >> white) (endOfCell >> white)
-             $ case fmt of
+             ( case fmt of
                  StringT   -> fmap StringV stringParser
                  NumberT _ -> fmap NumberV numberParser
                  DateT     -> fmap DateV   dateParser
             <|> return EmptyV
+             ) <?> "value cell ([...])"
 
 startOfHeader, endOfHeader, startOfCell, endOfCell
   :: Parsec String () Char
-startOfHeader = char '<' <?> "start of header '<'"
-endOfHeader   = char '>' <?> "end of header '>'"
-startOfCell   = char '[' <?> "start of cell '['"
-endOfCell     = char ']' <?> "end of cell ']'"
+startOfHeader = char '<'
+endOfHeader   = char '>' <?> "end of column header (>)"
+startOfCell   = char '['
+endOfCell     = char ']' <?> "end of value cell (])"
 
 -- | 'stringParser' parses a string of allowed data characters
 stringParser :: Parsec String () String
@@ -163,7 +168,7 @@ trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
 -- | 'white' skips spaces and tabs
 white :: Parsec String () ()
-white = skipMany (oneOf " \t" <?> "whitespace")
+white = skipMany (oneOf " \t" <?> "white space")
 
 -- | 'eol' parses the end-of-line token
 eol :: Parsec String () ()
