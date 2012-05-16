@@ -1,14 +1,14 @@
-module Parser where
+module Spreadsheet.Parser where
 
 import Control.Applicative ((<$),(<*))
 import Control.Monad       (when)
 import Data.Char           (isPrint, isSpace)
+import Data.Maybe          (fromMaybe)
 import Data.Time           (Day, fromGregorianValid)
 import Numeric             (readFloat)
 import Text.Parsec
 
 import Spreadsheet
-import ListUtilities
 
 -- | 'defaultType' is the type that columns will default to when
 -- not otherwise specified
@@ -26,10 +26,10 @@ spreadsheetParser = do
 
   let headings' = map headerTokenName headings 
   let formats'  = extendFormats formats headings
-  let formats'' = replace EmptyT defaultType formats'
+  let formats'' = map (fromMaybe defaultType) formats'
   let orders    = map headerSortOrder headings
 
-  rows <- many (tableRow formats')
+  rows <- many (tableRow formats'')
   spaces
   eof
 
@@ -39,10 +39,10 @@ spreadsheetParser = do
 -- | 'extendFormats' deals with creating new format types
 -- for newly created columns and for defaulting unspecified
 -- columns to the 'defaultType'
-extendFormats :: [CellType] -> [HeaderToken] -> [CellType]
-extendFormats xs     (NewColumn:ys) = EmptyT : extendFormats xs ys
-extendFormats (x:xs) (_:ys)         = x      : extendFormats xs ys
-extendFormats _      ys             = map (const defaultType) ys
+extendFormats :: [CellType] -> [HeaderToken] -> [Maybe CellType]
+extendFormats xs     (NewColumn:ys) = Nothing : extendFormats xs ys
+extendFormats (x:xs) (_:ys)         = Just x  : extendFormats xs ys
+extendFormats _      ys             = map (const Nothing) ys
 
 -- | 'headerChar' parses characters with are valid in header names.
 headerChar :: Parsec String () Char
@@ -93,7 +93,6 @@ newRow formats = char '+' >> return (map (const EmptyV) formats)
 
 -- | 'dataCell' parses an individual data cell in a data row
 dataCell :: CellType -> Parsec String () CellValue
-dataCell EmptyT = return EmptyV
 dataCell fmt = between (startOfCell >> white) (endOfCell >> white)
              $ case fmt of
                  StringT   -> fmap StringV stringParser

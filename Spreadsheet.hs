@@ -6,7 +6,6 @@ data CellType
   = NumberT (Maybe Integer)
   | StringT
   | DateT
-  | EmptyT
   deriving (Show, Read, Eq)
 
 data Column = Column

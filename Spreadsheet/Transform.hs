@@ -1,22 +1,25 @@
-module Transform where
+module Spreadsheet.Transform where
 
 import Text.Parsec
 import Data.List
 
-import Parser
-import Renderer
 import Spreadsheet
-import Sorting
+import Spreadsheet.Parser
+import Spreadsheet.Renderer
+import Spreadsheet.Sorting
 import ListUtilities
 
+transform :: (Spreadsheet -> Spreadsheet) -> IO ()
 transform f = interact $ \ xs ->
   let cleaned = removeErrors xs in
-  case runParser spreadsheetParser () "stdin" cleaned of
+  case parse spreadsheetParser "stdin" cleaned of
     Right res -> renderS (sortSpreadsheet (f res))
     Left  err -> unlines $ inlineError err $ lines cleaned
 
+removeErrors :: String -> String
 removeErrors = unlines . filter (not . isPrefixOf "!") . lines
 
+inlineError :: ParseError -> [String] -> [String]
 inlineError err xs = a ++ [errline] ++ b
   where
   (a,b) = splitAt (sourceLine (errorPos err)) xs

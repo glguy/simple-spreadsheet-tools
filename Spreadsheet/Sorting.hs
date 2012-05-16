@@ -1,4 +1,4 @@
-module Sorting where
+module Spreadsheet.Sorting where
 
 import Data.List
 import Data.Monoid
