@@ -18,7 +18,6 @@ table = QuasiQuoter
   , quoteType = \_ -> fail "table: types not supported"
   }
 
-
 toConName, toFieldName :: String -> Name
 toConName str   = mkName ("Row_" ++ str)
 toFieldName str = mkName ("col_" ++ map escape str)
@@ -36,7 +35,7 @@ declParser = do
 
 tableQ :: String -> DecsQ
 tableQ str = case parse declParser "quasiquoter" str of
-  Left err -> fail ("table: Parse failed with error: " ++ show err)
+  Left err -> fail ("table: Parse failed with error:\n" ++ show err)
   Right (name, Spreadsheet cols rows) -> do
     (recName, recDec) <- spreadsheetRecordQ name cols
     let rowsE = map (spreadsheetRowQ recName) rows
