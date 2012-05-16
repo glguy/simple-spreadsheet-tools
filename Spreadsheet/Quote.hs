@@ -7,6 +7,7 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Text.Parsec hiding (Column)
 import Text.Parsec.Error
+import Text.Parsec.Pos (newPos)
 
 import Spreadsheet
 import Spreadsheet.Parser (spreadsheetParser)
@@ -39,12 +40,19 @@ declParser = do
 -- 'tableQ' is a quasi-quoter for top-level spreadsheet declarations
 -- using the ASCII art spreadsheet format.
 tableQ :: String -> DecsQ
-tableQ str =
-  case parse declParser "[table|...|]" str of
+tableQ str = do
+  loc <- location
+  case parse (setLoc loc >> declParser) undefined str of
     Right (name, ss) -> tableD name ss
-    Left err -> do
-      loc <- location
-      fail (show (updateLocation loc err))
+    Left err         -> fail (show err)
+
+-- | 'setLoc' resets the local parser location to the encompassing
+-- file location.
+setLoc :: Loc -> Parsec String () ()
+setLoc loc = setPosition pos
+  where
+  pos         = newPos (loc_filename loc) line col
+  (line, col) = loc_start loc
 
 -- 'tableD' creates top-level spreadsheet declarations
 tableD :: String -> Spreadsheet -> DecsQ
@@ -64,19 +72,6 @@ tableD name (Spreadsheet cols rows) =
   typeName = toTypeName name
   conName  = toConName  name
   rowsE    = listE . map (spreadsheetRowE conName)
-
--- | 'updateLocation' combines the error location of a quasi-quoted
--- string and the error location inside the quasi-quoted string in
--- order to have an error position relative to the beginning of the
--- file.
-updateLocation :: Loc -> ParseError -> ParseError
-updateLocation loc err = setErrorPos newPos err
-  where
-  pos = errorPos err
-  line' = sourceLine pos + fst (loc_start loc) - 1
-  col'  = sourceColumn pos + snd (loc_start loc) - 1
-  newPos | sourceLine pos == 1 = setSourceLine (setSourceColumn pos col') line'
-         | otherwise = setSourceLine pos line'
 
 spreadsheetRowE :: Name -> [CellValue] -> ExpQ
 spreadsheetRowE conName xs = appsE (conE conName : map cellValueE xs)
