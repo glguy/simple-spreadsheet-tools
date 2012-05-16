@@ -6,6 +6,7 @@ import Data.Time (Day, fromGregorian, toGregorian)
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Text.Parsec hiding (Column)
+import Text.Parsec.Error
 
 import Spreadsheet
 import Spreadsheet.Parser (spreadsheetParser)
@@ -37,8 +38,10 @@ declParser = do
 
 tableD :: String -> DecsQ
 tableD str =
-  case parse declParser "quasiquoter" str of
-    Left err -> fail ("table: Parse failed with error:\n" ++ show err)
+  case parse declParser "[table|...|]" str of
+    Left err -> do
+      loc <- location
+      fail (show (updateLocation loc err))
     Right (name, Spreadsheet cols rows) ->
       sequence
         [ spreadsheetRecD typeName conName cols
@@ -51,6 +54,17 @@ tableD str =
       typeName = toTypeName name
       conName  = toConName  name
       rowsE    = listE . map (spreadsheetRowE conName)
+
+updateLocation :: Loc -> ParseError -> ParseError
+updateLocation loc err = setErrorPos newPos err
+  where
+  pos = errorPos err
+  line' = sourceLine pos + fst (loc_start loc) - 1
+  col'  = sourceColumn pos + snd (loc_start loc) - 1
+  newPos | sourceLine pos == 1 = setSourceLine (setSourceColumn pos col') line'
+         | otherwise = setSourceLine pos line'
+
+
 
 spreadsheetRowE :: Name -> [CellValue] -> ExpQ
 spreadsheetRowE conName xs = appsE (conE conName : map cellValueE xs)
