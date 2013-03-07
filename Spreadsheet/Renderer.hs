@@ -43,6 +43,59 @@ renderS (Spreadsheet hfs rs)
   sortLength Nothing  = 0
   sortLength (Just _) = 2
 
+-- | Render the spreadsheet in markdown.
+renderSmd :: Spreadsheet -> String
+renderSmd (Spreadsheet headers cells)
+  = unlines
+  $ ic paddedHeader
+  : ic headerSep
+  : map ic paddedCells
+  where
+  ic = intercalate "|"
+  -- Minimum width is 2 for the separator ":-"
+  widths = map (max 2) $
+      map maximum $ (map.map) length
+    $ transpose $ colNames : renderCells
+
+  paddedHeader = map (\(mx, x) -> padRight mx ' ' x) (zip widths colNames)
+
+  headerSep = map (':':) lns
+    where lns = map (flip replicate $ '-') (map (+(-1)) widths)
+
+  renderCells = (map.map) (concatMap markDownShow . uncurry render)
+                          (map (zip colTypes) cells)
+
+  paddedCells :: [[String]]
+  paddedCells = (map.map) dataPadmd expandedCells
+
+  expandedCells :: [[(Int, String)]]
+  expandedCells = map (zip widths) renderCells
+
+  colNames = map (concatMap markDownShow . columnName) headers
+  colTypes = map columnType headers
+
+  dataPadmd :: (Int, String) -> String
+  dataPadmd (mx, xs) = padRight mx ' ' xs
+
+markDownShow :: Char -> String
+markDownShow c =
+  case c of
+    '='  -> esc
+    '*'  -> esc
+    '{'  -> esc
+    '}'  -> esc
+    '['  -> esc
+    ']'  -> esc
+    '('  -> esc
+    ')'  -> esc
+    '#'  -> esc
+    '+'  -> esc
+    '_'  -> esc
+    '.'  -> esc
+    '!'  -> esc
+    _    -> [c]
+  where esc = ['\\',c]
+
 headerPad :: Int -> String -> Maybe SortOrder -> String
 headerPad i xs Nothing  = "< " ++ padRight (i - 4) ' ' xs ++ " >"
 headerPad i xs (Just s) = "< " ++ padRight (i - 6) ' ' xs ++ " " ++ sortStr ++ " >"
