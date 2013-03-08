@@ -47,35 +47,26 @@ renderS (Spreadsheet hfs rs)
 renderSmd :: Spreadsheet -> String
 renderSmd (Spreadsheet headers cells)
   = unlines
-  $ ic paddedHeader
-  : ic headerSep
-  : map ic paddedCells
+  $ map (intercalate "|")
+  $ padRow colNames
+  : headerSep
+  : map padRow renderedCells
   where
-  ic = intercalate "|"
   -- Minimum width is 2 for the separator ":-"
-  widths = map (max 2) $
-      map maximum $ (map.map) length
-    $ transpose $ colNames : renderCells
+  widths = (map (max 2 . maximum . map length) . transpose)
+           (colNames : renderedCells)
 
-  paddedHeader = map (\(mx, x) -> padRight mx ' ' x) (zip widths colNames)
+  mkSep w = ':' : replicate (w-1) '-'
+  headerSep = map mkSep widths
 
-  headerSep = map (':':) lns
-    where lns = map (flip replicate $ '-') (map (+(-1)) widths)
-
-  renderCells = (map.map) (concatMap markDownShow . uncurry render)
-                          (map (zip colTypes) cells)
-
-  paddedCells :: [[String]]
-  paddedCells = (map.map) dataPadmd expandedCells
-
-  expandedCells :: [[(Int, String)]]
-  expandedCells = map (zip widths) renderCells
-
-  colNames = map (concatMap markDownShow . columnName) headers
   colTypes = map columnType headers
+  colNames = map (escapeString . columnName) headers
 
-  dataPadmd :: (Int, String) -> String
-  dataPadmd (mx, xs) = padRight mx ' ' xs
+  renderedCells = map renderRow cells
+
+  padRow       = zipWith (\w -> padRight w ' ') widths
+  renderRow    = map escapeString . zipWith render colTypes
+  escapeString = concatMap markDownShow
 
 markDownShow :: Char -> String
 markDownShow c =
