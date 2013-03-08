@@ -13,7 +13,7 @@ transform :: (Spreadsheet -> Spreadsheet) -> IO ()
 transform f = interact $ \ xs ->
   let cleaned = removeErrors xs in
   case parse spreadsheetParser "stdin" cleaned of
-    Right res -> renderS (sortSpreadsheet (f res))
+    Right res -> renderSpreadsheet (sortSpreadsheet (f res))
     Left  err -> unlines $ inlineError err $ lines cleaned
 
 removeErrors :: String -> String

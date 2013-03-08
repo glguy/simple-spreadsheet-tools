@@ -7,41 +7,52 @@ import Numeric
 import Spreadsheet
 import ListUtilities
 
-render :: CellType -> CellValue -> String
-render StringT           (StringV xs) = xs
-render (NumberT Nothing) (NumberV n)  | denominator n == 1 = show (numerator n)
-render (NumberT p)       (NumberV n)  = showFFloat (fmap fromInteger p) (fromRational n :: Double) ""
-render DateT             (DateV d)    = show d
-render _                 EmptyV       = ""
-render _                 _            = "!!!"
+renderCell :: CellType -> CellValue -> String
+renderCell StringT           (StringV xs) = xs
+renderCell (NumberT Nothing) (NumberV n)  | denominator n == 1 = show (numerator n)
+renderCell (NumberT p)       (NumberV n)  = showFFloat (fmap fromInteger p) (fromRational n :: Double) ""
+renderCell DateT             (DateV d)    = show d
+renderCell _                 EmptyV       = ""
+renderCell _                 _            = "!!!"
 
-renderT :: CellType -> String
-renderT StringT     = "text"
-renderT (NumberT p) = "number" ++ maybe "" ((':':).show) p
-renderT DateT       = "date"
+renderCellType :: CellType -> String
+renderCellType StringT     = "text"
+renderCellType (NumberT p) = "number" ++ maybe "" ((':':).show) p
+renderCellType DateT       = "date"
 
-renderS :: Spreadsheet -> String
-renderS (Spreadsheet hfs rs)
+renderSpreadsheet :: Spreadsheet -> String
+renderSpreadsheet (Spreadsheet hfs rs)
   = unlines
-  $ intercalate " " (zipWith3 headerPad widths hs ss)
-  : intercalate " " (zipWith formatPad widths fTexts)
-  : replicate (sum widths + length widths - 1) '='
-  : map (intercalate " " . zipWith3 dataPad widths fs) rTexts
+  $ map (intercalate " ")
+  $ zipWith3 headerPad widths hs ss
+  : zipWith formatPad widths fTexts
+  : [headerBar]
+  : map (zipWith3 dataPad widths fs) rTexts
   where
-  widths = map maximum $ transpose $ zipWith (\h s -> length h + 4 + sortLength s) hs ss
-                                   : map length fTexts
-                                   : map (map (\d -> length d + 4)) rTexts
+  widths = map maximum
+         $ transpose
+         $ map headerWidth hfs
+         : map length fTexts
+         : map (map cellWidth) rTexts
+
+  headerBar = replicate (sum widths + length widths - 1) '='
 
   hs = map columnName hfs
   fs = map columnType hfs
   ss = map columnSort hfs
 
-  fTexts = map renderT fs
+  headerWidth h = length (columnName h) + sortLength (columnSort h) + 4
+  -- extra 4 because header is wrapped by '< ' and ' >'
 
-  rTexts = map (zipWith render fs) rs
+  cellWidth d = length d + 4
+  -- extra 4 because cell is wrapped by '[ ' and ' ]'
 
-  sortLength Nothing  = 0
-  sortLength (Just _) = 2
+  fTexts = map renderCellType fs
+
+  rTexts = map (zipWith renderCell fs) rs
+
+  sortLength Nothing  = 0 -- ''
+  sortLength (Just _) = 2 -- ' +' and ' -'
 
 -- | Render the spreadsheet in markdown.
 renderSmd :: Spreadsheet -> String
@@ -65,11 +76,11 @@ renderSmd (Spreadsheet headers cells)
   renderedCells = map renderRow cells
 
   padRow       = zipWith (\w -> padRight w ' ') widths
-  renderRow    = map escapeString . zipWith render colTypes
-  escapeString = concatMap markDownShow
+  renderRow    = map escapeString . zipWith renderCell colTypes
+  escapeString = concatMap markDownEscape
 
-markDownShow :: Char -> String
-markDownShow c =
+markDownEscape :: Char -> String
+markDownEscape c =
   case c of
     '='  -> esc
     '*'  -> esc
@@ -84,6 +95,7 @@ markDownShow c =
     '_'  -> esc
     '.'  -> esc
     '!'  -> esc
+    '|'  -> esc
     _    -> [c]
   where esc = ['\\',c]
 
@@ -92,14 +104,16 @@ headerPad i xs Nothing  = "< " ++ padRight (i - 4) ' ' xs ++ " >"
 headerPad i xs (Just s) = "< " ++ padRight (i - 6) ' ' xs ++ " " ++ sortStr ++ " >"
   where
   sortStr = case s of
-              Ascending  -> "+"
-              Descending -> "-"
+    Ascending  -> "+"
+    Descending -> "-"
 
 formatPad :: Int -> String -> String
 formatPad i xs = padRight i ' ' xs
 
-
 dataPad :: Int -> CellType -> String -> String
-dataPad i StringT     xs = "[ " ++ padRight (i - 4) ' ' xs ++ " ]"
-dataPad i DateT       xs = "[ " ++ padRight (i - 4) ' ' xs ++ " ]"
-dataPad i (NumberT _) xs = "[ " ++ padLeft  (i - 4) ' ' xs ++ " ]"
+dataPad i cellType xs = "[ " ++ pad (i - 4) ' ' xs ++ " ]"
+  where
+  pad = case cellType of
+    StringT   -> padRight
+    DateT     -> padRight
+    NumberT _ -> padLeft
