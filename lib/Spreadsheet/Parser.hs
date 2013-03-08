@@ -3,6 +3,7 @@ module Spreadsheet.Parser where
 import Control.Applicative ((<$),(<*))
 import Control.Monad       (when)
 import Data.Char           (isPrint, isSpace)
+import Data.List           (dropWhileEnd)
 import Data.Maybe          (fromMaybe)
 import Data.Time           (Day, fromGregorianValid)
 import Numeric             (readFloat)
@@ -21,11 +22,11 @@ spreadsheetParser :: Parsec String () Spreadsheet
 spreadsheetParser = do
   spaces
   headings <- headerRow
-  formats  <- option [] (wordsRow formatCell)
+  formats  <- option [] (sepEndBy1 formatCell white1 <* eol)
   optional dividerRow
 
-  let headings' = map headerTokenName headings 
-  let formats'  = extendFormats formats headings
+  let headings' = map headerTokenName headings
+  let formats'  = extendFormats (formats ++ repeat defaultType) headings
   let formats'' = map (fromMaybe defaultType) formats'
   let orders    = map headerSortOrder headings
 
@@ -52,7 +53,7 @@ namedSpreadsheetParser = do
 extendFormats :: [CellType] -> [HeaderToken] -> [Maybe CellType]
 extendFormats xs     (NewColumn:ys) = Nothing : extendFormats xs ys
 extendFormats (x:xs) (_:ys)         = Just x  : extendFormats xs ys
-extendFormats _      ys             = map (const Nothing) ys
+extendFormats _      []             = []
 
 -- | 'headerChar' parses characters with are valid in header names.
 headerChar :: Parsec String () Char
@@ -69,7 +70,7 @@ headerCell = existingHeader <|> newHeader
 
 -- | 'headerCell' parses a single header entry in the header line
 existingHeader :: Parsec String () HeaderToken
-existingHeader = between (startOfHeader >> white) (endOfHeader >> white)
+existingHeader = between startOfHeader endOfHeader
    (do name <- many1 headerChar
        order <- option Nothing (fmap Just sortOrder)
        return (HeaderToken (trim name) order)
@@ -77,14 +78,12 @@ existingHeader = between (startOfHeader >> white) (endOfHeader >> white)
 
 -- | 'sortOrder' parses the ascending/descending indicator
 sortOrder :: Parsec String () SortOrder
-sortOrder = (char '+' >> white >> return Ascending)
-        <|> (char '-' >> white >> return Descending)
- <?> "sort order (+)(-)"
+sortOrder = (Ascending  <$ sortAscTok )
+        <|> (Descending <$ sortDescTok)
 
 -- | 'newHeader' parses the new header placeholder
 newHeader :: Parsec String () HeaderToken
-newHeader = char '+' >> white >> return NewColumn
-         <?> "new header marker (+)"
+newHeader = NewColumn <$ newColTok
 
 -- | 'formatCell' parses the "type" field of a column
 formatCell :: Parsec String () CellType
@@ -103,13 +102,12 @@ tableRow formats = (newRow formats <|> mapM dataCell formats) <* eol
 
 -- | 'newRow' parses a new row placeholder
 newRow :: [Maybe CellType] -> Parsec String () [CellValue]
-newRow formats = map (const EmptyV) formats <$ char '+'
-             <?> "new row marker (+)"
+newRow formats = map (const EmptyV) formats <$ newRowTok
 
 -- | 'dataCell' parses an individual data cell in a data row
 dataCell :: Maybe CellType -> Parsec String () CellValue
 dataCell Nothing = return EmptyV
-dataCell (Just fmt) = between (startOfCell >> white) (endOfCell >> white)
+dataCell (Just fmt) = between startOfCell endOfCell
              ( case fmt of
                  StringT   -> fmap StringV stringParser
                  NumberT _ -> fmap NumberV numberParser
@@ -118,11 +116,19 @@ dataCell (Just fmt) = between (startOfCell >> white) (endOfCell >> white)
              ) <?> "value cell ([...])"
 
 startOfHeader, endOfHeader, startOfCell, endOfCell
-  :: Parsec String () Char
-startOfHeader = char '<'
-endOfHeader   = char '>' <?> "end of column header (>)"
-startOfCell   = char '['
-endOfCell     = char ']' <?> "end of value cell (])"
+  :: Parsec String () ()
+startOfHeader = tok '<' <?> "start of column header (<)"
+endOfHeader   = tok '>' <?> "end of column header (>)"
+startOfCell   = tok '[' <?> "start of value cell ([)"
+endOfCell     = tok ']' <?> "end of value cell (])"
+newRowTok     = tok '+' <?> "new row marker (+)"
+newColTok     = tok '+' <?> "new column marker (+)"
+sortAscTok    = tok '+' <?> "sort ascending (+)"
+sortDescTok   = tok '-' <?> "sort descending (-)"
+
+-- | Consume a token character and any trailing white space.
+tok :: Char -> Parsec String () ()
+tok c = char c >> white
 
 -- | 'stringParser' parses a string of allowed data characters
 stringParser :: Parsec String () String
@@ -131,7 +137,7 @@ stringParser = fmap trim (many1 dataChar)
 -- | 'numberParser' parses data cells holding number fields
 numberParser :: Parsec String () Rational
 numberParser = do
-  negative <- option False (char '-' >> return True)
+  negative <- option False (True <$ char '-')
   x        <- many1 digit
   y        <- option "0" (char '.' >> many1 digit)
   let [(n,"")]         = readFloat (x ++ "." ++ y)
@@ -176,25 +182,19 @@ dataChar = satisfy (\x -> isPrint x && x `notElem` "[]\n") <?> "text"
 
 -- | 'trim' removes leading and trailing whitespace on a string
 trim :: String -> String
-trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+trim = dropWhile isSpace . dropWhileEnd isSpace
 
 -- | 'white' skips spaces and tabs
 white :: Parsec String () ()
 white = skipMany (oneOf " \t" <?> "white space")
 
+-- | 'white1' skips at least one of spaces and tabs
+white1 :: Parsec String () ()
+white1 = skipMany1 (oneOf " \t" <?> "white space")
+
 -- | 'eol' parses the end-of-line token
 eol :: Parsec String () ()
 eol = newline >> spaces
-
--- | 'wordsRow' parses a sequence of words delimited by whitespace ending in a newline
-wordsRow :: Parsec String () a -> Parsec String () [a]
-wordsRow p = onemore <|> ([] <$ eol)
-  where
-  onemore = do
-    x <- p
-    xs <- (skipMany1 (oneOf " \t") >> wordsRow p)
-      <|> ([] <$ eol)
-    return (x:xs)
 
 data HeaderToken
   = NewColumn
