@@ -6,23 +6,28 @@ import Data.List
 import Spreadsheet
 import Spreadsheet.Parser
 import Spreadsheet.Renderer
-import Spreadsheet.Sorting
 import ListUtilities
 
-transform :: (Spreadsheet -> Spreadsheet) -> IO ()
-transform f = interact $ \ xs ->
+-- | Parse a spreadsheet, apply a transformation, and rerender the
+-- result. Parse errors will be inlined into the untransformed
+-- output. Errors are ignored when performing the transformation.
+transform :: (Spreadsheet -> Spreadsheet) -> String -> String
+transform f xs =
   let cleaned = removeErrors xs in
   case parse spreadsheetParser "stdin" cleaned of
-    Right res -> renderSpreadsheet (sortSpreadsheet (f res))
-    Left  err -> unlines $ inlineError err $ lines cleaned
+    Right res -> renderSpreadsheet (f res)
+    Left  err -> inlineError err cleaned
 
+-- | Remove inlined errors from a spreadsheet
 removeErrors :: String -> String
 removeErrors = unlines . filter (not . isPrefixOf "!") . lines
 
-inlineError :: ParseError -> [String] -> [String]
-inlineError err xs = a ++ [errline] ++ b
+-- | Insert an error into spreadsheet pointing at the position
+-- of the error.
+inlineError :: ParseError -> String -> String
+inlineError err xs = unlines (a ++ [errline] ++ b)
   where
-  (a,b) = splitAt (sourceLine (errorPos err)) xs
+  (a,b) = splitAt (sourceLine (errorPos err)) (lines xs)
 
   spaceBeforeCaret = sourceColumn (errorPos err) - 2
   errline
