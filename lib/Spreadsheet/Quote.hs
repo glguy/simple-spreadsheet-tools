@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE CPP, TemplateHaskell #-}
 module Spreadsheet.Quote (table) where
 
 import Data.Time (Day, fromGregorian, toGregorian)
@@ -76,9 +76,18 @@ dayE day = [|fromGregorian y m d|]
   where
   (y,m,d) = toGregorian day
 
+
+dataD' :: CxtQ -> Name -> [TyVarBndr] -> [ConQ] -> [Name] -> DecQ
+#if MIN_VERSION_template_haskell(2,11,0)
+dataD' c n tvs cons derives = dataD c n tvs Nothing cons (return (map ConT derives))
+#else
+dataD' = dataD
+#endif
+
+
 spreadsheetRecD :: Name -> Name -> [Column] -> DecQ
 spreadsheetRecD typeName conName xs =
-  dataD (cxt []) typeName [] [recC conName fields] [''Show,''Read,''Eq]
+  dataD' (cxt []) typeName [] [recC conName fields] [''Show,''Read,''Eq]
   where
   fields = map toField xs
 
